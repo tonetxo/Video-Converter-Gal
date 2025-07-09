@@ -21,11 +21,11 @@ A user-friendly GUI for converting videos and animations, **with special support
 2.  Download the latest `.AppImage` file.
 3.  Make it executable:
     ```bash
-    chmod +x Video-Converter-Pro-*.AppImage
+    chmod +x Video-Converter-Gal-*.AppImage
     ```
 4.  Run it:
     ```bash
-    ./Video-Converter-Pro-*.AppImage
+    ./Video-Converter-Gal-*.AppImage
     ```
 
 ## 📄 License
