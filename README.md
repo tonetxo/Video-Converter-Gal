@@ -1,2 +1,33 @@
 # Video-Converter-Gal
-A powerful yet simple graphical interface for ffmpeg that handles video conversion, scaling, color correction, and audio mixing. Built with Python/Gradio and distributed as an AppImage. Please note the application's language is Galician.
+
+A user-friendly GUI for converting videos and animations, **with special support for animated WebP files**. Built with Python/Gradio and packaged as a portable AppImage for Linux. The UI is in Galician (Galego).
+
+![Screenshot of the app](imaxe.png)
+*Note: You need to upload your `imaxe.png` file to the repository for this image to be displayed.*
+
+## ✨ Features
+
+* Easy video and image conversion powered by ffmpeg.
+* **Reliably converts animated WebP files (the original motivation for the project!).**
+* Adjust video speed and quality (CRF/QP).
+* Color correction presets and manual adjustments (brightness, contrast, saturation).
+* Scale video resolution.
+* Audio mixing with fade-in/out effects for multiple tracks.
+* GPU acceleration support (NVIDIA NVENC).
+
+## 🚀 How to Use
+
+1.  Go to the [**Releases page**](https://github.com/tonetxo/Video-Converter-Gal/releases).
+2.  Download the latest `.AppImage` file.
+3.  Make it executable:
+    ```bash
+    chmod +x Video-Converter-Pro-*.AppImage
+    ```
+4.  Run it:
+    ```bash
+    ./Video-Converter-Pro-*.AppImage
+    ```
+
+## 📄 License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
