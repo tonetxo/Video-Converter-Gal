@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Obtén a ruta absoluta do directorio temporal da AppImage
+APPDIR=$(dirname "$(readlink -f "$0")")
+
+# Exporta a ruta ao contorno virtual (venv) e aos binarios (ffmpeg)
+# Este é un dos pasos cruciais para que atope todo
+export PATH="$APPDIR/usr/bin:$APPDIR/usr/venv/bin:$PATH"
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
+
+# Cambia ao directorio persoal do usuario para que os ficheiros se garden aí
+cd ~
+
+# Executa o script de Python usando a RUTA ABSOLUTA e completa ao intérprete do venv.
+# Isto elimina o erro "not found" porque non deixa lugar a dúbidas.
+"$APPDIR/usr/venv/bin/python3" "$APPDIR/usr/bin/galego.py"
