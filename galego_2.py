@@ -1,4 +1,4 @@
-# --- Video Converter Pro+ (Versión Final con Correccións Cirúrxicas) ---
+# --- Video Converter Pro+ (Versión Final, Completa e Funcional) ---
 
 import gradio as gr
 import subprocess
@@ -22,14 +22,15 @@ FFMPEG_PATH = shutil.which("ffmpeg")
 FFPROBE_PATH = shutil.which("ffprobe")
 CPU_CORES = multiprocessing.cpu_count()
 MAX_THREADS = min(CPU_CORES, 16)
-CACHE_DIR = Path(".video_converter_cache")
+CACHE_DIR = Path.home() / ".video_converter_cache"
 TEMP_DIR = Path(tempfile.gettempdir()) / "video_converter_temp"
+PRESETS_FILE = Path.home() / ".video_converter_presets.json"
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Color correction presets (actualizados con novos parámetros)
+# Color correction presets
 COLOR_PRESETS = {
     "Normal": {"brightness": 0.0, "contrast": 1.0, "saturation": 1.0, "sharp": 0.0, "blur": 0.0, "gamma": 1.0},
     "Vibrant": {"brightness": 0.02, "contrast": 1.15, "saturation": 1.25, "sharp": 0.5, "blur": 0.0, "gamma": 1.1},
@@ -40,16 +41,81 @@ COLOR_PRESETS = {
     "Cool": {"brightness": -0.02, "contrast": 1.1, "saturation": 1.05, "sharp": 0.4, "blur": 0.0, "gamma": 0.95}
 }
 
+# --- Preset Management Functions ---
+def load_presets_from_file():
+    if PRESETS_FILE.exists():
+        with open(PRESETS_FILE, 'r', encoding='utf-8') as f:
+            try: return json.load(f)
+            except json.JSONDecodeError: return {}
+    return {}
+
+def save_presets_to_file(presets):
+    with open(PRESETS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(presets, f, indent=4)
+
+def get_preset_choices():
+    return list(load_presets_from_file().keys())
+
+def save_preset(preset_name, *values):
+    if not preset_name:
+        gr.Warning("Por favor, introduce un nome para o axuste.")
+        return gr.update(choices=get_preset_choices())
+    presets = load_presets_from_file()
+    keys = [
+        "speed", "quality", "gpu", "scale_enabled", "scale_factor", "fixed_res_enabled", "fixed_res_value",
+        "interpolate", "custom_fps", "fps_value", "brightness", "contrast", "saturation", "sharp",
+        "blur", "gamma", "process_audio", "preserve_pitch", "fade_in_1", "fade_out_1",
+        "fade_in_2", "fade_out_2", "vol_original", "vol_track_1", "vol_track_2"
+    ]
+    presets[preset_name] = dict(zip(keys, values))
+    save_presets_to_file(presets)
+    gr.Info(f"Axuste '{preset_name}' gardado con éxito!")
+    return gr.update(choices=get_preset_choices(), value=preset_name)
+
+def load_preset(preset_name):
+    presets = load_presets_from_file()
+    if preset_name in presets:
+        gr.Info(f"Cargando axuste '{preset_name}'...")
+        p = presets[preset_name]
+        return [
+            p.get("speed", 1.0), p.get("quality", 23), p.get("gpu", True),
+            p.get("scale_enabled", False), p.get("scale_factor", 100),
+            p.get("fixed_res_enabled", False), p.get("fixed_res_value", ""),
+            p.get("interpolate", False), p.get("custom_fps", False),
+            p.get("fps_value", 25), p.get("brightness", 0.0),
+            p.get("contrast", 1.0), p.get("saturation", 1.0),
+            p.get("sharp", 0.0), p.get("blur", 0.0), p.get("gamma", 1.0),
+            p.get("process_audio", True), p.get("preserve_pitch", True),
+            p.get("fade_in_1", 1.0), p.get("fade_out_1", 1.0),
+            p.get("fade_in_2", 1.0), p.get("fade_out_2", 1.0),
+            p.get("vol_original", 1.0), p.get("vol_track_1", 1.0),
+            p.get("vol_track_2", 1.0)
+        ]
+    gr.Warning(f"Non se atopou o axuste '{preset_name}'.")
+    return [None] * 25
+
+def delete_preset(preset_name):
+    if not preset_name:
+        gr.Warning("Por favor, elixe un axuste para eliminar.")
+        return gr.update(choices=get_preset_choices())
+    presets = load_presets_from_file()
+    if preset_name in presets:
+        del presets[preset_name]
+        save_presets_to_file(presets)
+        gr.Info(f"Axuste '{preset_name}' eliminado.")
+        return gr.update(choices=get_preset_choices(), value=None)
+    gr.Warning(f"Non se puido atopar o axuste '{preset_name}' para eliminar.")
+    return gr.update(choices=get_preset_choices())
+
+# --- Core Processing Functions ---
 def verify_tools():
-    """Verifica que FFmpeg e FFprobe estean dispoñibles."""
     if not all([FFMPEG_PATH, FFPROBE_PATH]):
-        raise gr.Error("FFmpeg e FFprobe son necesarios. Asegúrate de que estean na ruta do teu sistema (PATH).")
+        raise gr.Error("FFmpeg e FFprobe son necesarios.")
     CACHE_DIR.mkdir(exist_ok=True)
     TEMP_DIR.mkdir(exist_ok=True)
     logger.info("Ferramentas verificadas correctamente")
 
 def get_video_duration(file_path):
-    """Obtén a duración dun ficheiro de vídeo."""
     try:
         cmd = [FFPROBE_PATH, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(file_path)]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8')
@@ -57,7 +123,6 @@ def get_video_duration(file_path):
     except: return 0.0
 
 def get_audio_duration(file_path):
-    """Obtén a duración dun ficheiro de audio."""
     try:
         cmd = [FFPROBE_PATH, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(file_path)]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, encoding='utf-8')
@@ -65,7 +130,6 @@ def get_audio_duration(file_path):
     except: return 0.0
 
 def get_video_info(file_path):
-    """Obtén información detallada dun ficheiro multimedia."""
     if not file_path or not Path(file_path).exists(): return "O ficheiro non existe."
     try:
         cmd = [FFPROBE_PATH, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(file_path)]
@@ -103,21 +167,18 @@ def get_video_info(file_path):
     except Exception as e: return f"Non se puido ler o ficheiro.\nErro: {e}"
 
 def detect_gpu():
-    """Detecta se o codificador h264_nvenc de NVIDIA está dispoñible."""
     try:
         result = subprocess.run([FFMPEG_PATH, "-encoders"], capture_output=True, text=True, check=True, encoding='utf-8')
         return "h264_nvenc" in result.stdout
     except: return False
 
 def verify_audio_filters():
-    """Verifica a dispoñibilidade dos filtros de audio atempo e rubberband."""
     try:
         result = subprocess.run([FFMPEG_PATH, "-filters"], capture_output=True, text=True, check=True, encoding='utf-8')
         return "atempo" in result.stdout, "rubberband" in result.stdout
     except: return False, False
 
 def get_original_fps(file_path):
-    """Obtén os FPS orixinais dun ficheiro multimedia."""
     try:
         cmd_fps = [FFPROBE_PATH, "-v", "error", "-select_streams", "v:0", "-of", "default=noprint_wrappers=1:nokey=1", "-show_entries", "stream=r_frame_rate", str(file_path)]
         fps_str = subprocess.run(cmd_fps, check=True, capture_output=True, text=True, encoding='utf-8').stdout.strip()
@@ -133,7 +194,6 @@ def get_original_fps(file_path):
         except: return 25.0
 
 def scale_frame(args):
-    """Escala un único fotograma."""
     input_path, output_path, scale_factor = args
     try:
         with Image.open(input_path) as img:
@@ -143,24 +203,12 @@ def scale_frame(args):
     except Exception as e: logger.error(f"Erro ao escalar {input_path}: {e}")
 
 def generate_crop_filter_for_aspect_ratio(w, h):
-    """Xera un filtro de recorte para manter a relación de aspecto."""
     return f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
 
-# Actualizada para incluir novos parámetros
 def validate_color_parameters(b, c, s, sharp, blur, gamma):
-    """Valida e limita os parámetros de cor."""
-    return (
-        max(-0.3, min(0.3, b)),
-        max(0.7, min(1.5, c)),
-        max(0.5, min(2.0, s)),
-        max(0.0, min(10.0, sharp)),
-        max(0.0, min(10.0, blur)),
-        max(0.1, min(10.0, gamma))
-    )
+    return (max(-0.3, min(0.3, b)), max(0.7, min(1.5, c)), max(0.5, min(2.0, s)), max(0.0, min(10.0, sharp)), max(0.0, min(10.0, blur)), max(0.1, min(10.0, gamma)))
 
-# Actualizada para soportar sharp, blur e gamma
 def preview_color_correction(input_tempfile, b, c, s, sharp, blur, gamma):
-    """Xera unha previsualización dos cambios de cor."""
     if not input_tempfile: raise gr.Error("Por favor, sube un ficheiro primeiro.")
     input_path = input_tempfile.name
     b, c, s, sharp, blur, gamma = validate_color_parameters(b, c, s, sharp, blur, gamma)
@@ -169,49 +217,26 @@ def preview_color_correction(input_tempfile, b, c, s, sharp, blur, gamma):
         with Image.open(input_path) as img: img.seek(0); img.copy().convert("RGB").save(original_frame)
     except:
         subprocess.run([FFMPEG_PATH, "-i", input_path, "-vframes", "1", "-q:v", "2", "-y", str(original_frame)], check=True, capture_output=True)
-    
-    # Construír cadea de filtros
-    filter_chain = []
-    eq_params = []
-    if b != 0.0:
-        eq_params.append(f"brightness={b:.3f}")
-    if c != 1.0:
-        eq_params.append(f"contrast={c:.3f}")
-    if s != 1.0:
-        eq_params.append(f"saturation={s:.3f}")
-    if gamma != 1.0:
-        eq_params.append(f"gamma={gamma:.3f}")
-    
-    if eq_params:
-        filter_chain.append("eq=" + ":".join(eq_params))
-    
-    if blur > 0.0:
-        filter_chain.append(f"boxblur=luma_radius={blur:.3f}:luma_power=1")
-    
-    if sharp > 0.0:
-        filter_chain.append(f"unsharp=lx=5:ly=5:la={sharp:.3f}")
-
-    if not filter_chain: 
-        shutil.copy(original_frame, corrected_frame)
+    filter_chain, eq_params = [], []
+    if b != 0.0: eq_params.append(f"brightness={b:.3f}")
+    if c != 1.0: eq_params.append(f"contrast={c:.3f}")
+    if s != 1.0: eq_params.append(f"saturation={s:.3f}")
+    if gamma != 1.0: eq_params.append(f"gamma={gamma:.3f}")
+    if eq_params: filter_chain.append("eq=" + ":".join(eq_params))
+    if blur > 0.0: filter_chain.append(f"boxblur=luma_radius={blur:.3f}:luma_power=1")
+    if sharp > 0.0: filter_chain.append(f"unsharp=lx=5:ly=5:la={sharp:.3f}")
+    if not filter_chain: shutil.copy(original_frame, corrected_frame)
     else:
         try:
-            subprocess.run([
-                FFMPEG_PATH, "-i", str(original_frame),
-                "-vf", ",".join(filter_chain),
-                "-y", str(corrected_frame)
-            ], check=True, capture_output=True)
-        except subprocess.CalledProcessError as e: 
-            raise gr.Error(f"A corrección de cor fallou: {e.stderr.decode()}")
+            subprocess.run([FFMPEG_PATH, "-i", str(original_frame), "-vf", ",".join(filter_chain), "-y", str(corrected_frame)], check=True, capture_output=True)
+        except subprocess.CalledProcessError as e: raise gr.Error(f"A corrección de cor fallou: {e.stderr.decode()}")
     return str(original_frame), str(corrected_frame)
 
-# Actualizada para devolver novos parámetros
 def apply_color_preset(name):
-    """Aplica unha predefinición de cor."""
     p = COLOR_PRESETS.get(name, COLOR_PRESETS["Normal"])
     return p["brightness"], p["contrast"], p["saturation"], p["sharp"], p["blur"], p["gamma"]
 
 def process_audio_track(track_id, temp_file, fade_in, fade_out, target_duration, speed, preserve_pitch):
-    """Procesa unha pista de audio individual."""
     if not temp_file: return None
     track_path, mtime = temp_file.name, Path(temp_file.name).stat().st_mtime
     key = hashlib.sha256(f"{track_path}-{mtime}-{fade_in}-{fade_out}-{target_duration}-{speed}-{preserve_pitch}".encode()).hexdigest()
@@ -230,28 +255,23 @@ def process_audio_track(track_id, temp_file, fade_in, fade_out, target_duration,
     fade_out_start = max(0, target_duration - fade_out)
     filters.extend([f"afade=t=in:st=0:d={fade_in:.2f}", f"afade=t=out:st={fade_out_start:.2f}:d={fade_out:.2f}"])
     cmd = [FFMPEG_PATH, "-i", track_path] + (["-af", ",".join(filters)] if filters else []) + ["-t", str(target_duration), "-c:a", "aac", "-b:a", "192k", "-y", str(cached_path)]
-    try: subprocess.run(cmd, check=True, capture_output=True, text=True); return str(cached_path)
+    try: subprocess.run(cmd, check=True, capture_output=True); return str(cached_path)
     except subprocess.CalledProcessError as e: logger.error(f"Procesamento de audio {track_id} fallou: {e}"); return None
 
-# Actualizada para aceptar novos parámetros
 def process_video(input_tempfile, output_path, speed=1.0, quality_crf=23, use_gpu=False,
-                  scale_enabled=False, scale_factor=100, use_custom_fps=False, target_fps=25.0,
+                  scale_enabled=False, scale_factor=100, use_custom_fps=False, fps_value=25.0,
                   interpolate=False, use_fixed_res=False, fixed_resolution="", process_audio=False,
                   preserve_pitch=False,
                   audio_track_1_tempfile=None, fade_in_1=1.0, fade_out_1=1.0,
                   audio_track_2_tempfile=None, fade_in_2=1.0, fade_out_2=1.0,
                   vol_original=1.0, vol_track_1=1.0, vol_track_2=1.0,
                   brightness=0.0, contrast=1.0, saturation=1.0,
-                  sharp=0.0, blur=0.0, gamma=1.0,  # Novos parámetros
+                  sharp=0.0, blur=0.0, gamma=1.0,
                   progress=gr.Progress(track_tqdm=True)):
-    """Función principal para procesar o vídeo."""
     verify_tools()
     if not input_tempfile: raise gr.Error("Por favor, sube un ficheiro.")
     input_path = Path(input_tempfile.name)
-    # Validar todos os parámetros de cor
-    brightness, contrast, saturation, sharp, blur, gamma = validate_color_parameters(
-        brightness, contrast, saturation, sharp, blur, gamma)
-    
+    brightness, contrast, saturation, sharp, blur, gamma = validate_color_parameters(brightness, contrast, saturation, sharp, blur, gamma)
     input_info = get_video_info(input_path)
     is_conventional_video = input_path.suffix.lower() in [".mp4",".mov",".avi",".mkv",".webm"]
     original_fps, original_duration = get_original_fps(input_path), get_video_duration(input_path)
@@ -273,7 +293,7 @@ def process_video(input_tempfile, output_path, speed=1.0, quality_crf=23, use_gp
         if is_conventional_video: subprocess.run([FFMPEG_PATH, "-i", str(input_path), "-q:v", "2", str(original_frame_pattern)], check=True, capture_output=True)
         else:
             with Image.open(input_path) as img:
-                for i in progress.tqdm(range(getattr(img, 'n_frames', 1)), desc="Extraindo fotogramas"):
+                for i in progress.tqdm(range(getattr(img, 'n_frames', 1)), desc="Extraendo fotogramas"):
                     img.seek(i); img.copy().convert("RGB").save(original_frames_dir / f"frame-{i:05d}.png")
         if scale_enabled and scale_factor != 100:
             frame_files = sorted(original_frames_dir.glob("frame-*.png"))
@@ -284,16 +304,40 @@ def process_video(input_tempfile, output_path, speed=1.0, quality_crf=23, use_gp
         else:
             for f in original_frames_dir.glob("frame-*.png"): shutil.move(str(f), cache_path / f.name)
             original_frames_dir.rmdir()
-
-    # --- ESTRUTURA DE COMANDO FFmpeg ROBUSTA E DEFINITIVA ---
-
-    # 1. Comando base coa entrada de vídeo
-    final_video_duration = original_duration / speed
-    input_ffmpeg_rate = original_fps * speed
-    cmd_final = [FFMPEG_PATH, "-framerate", str(input_ffmpeg_rate), "-i", str(frame_source)]
     
-    # 2. Recoller pistas de audio procesadas
+    vf_filters, final_video_duration, input_ffmpeg_rate = [], original_duration / speed, original_fps
+    
+    if speed != 1.0:
+        vf_filters.append(f"setpts={1.0/speed:.4f}*PTS")
+        input_ffmpeg_rate = original_fps * speed
+    
+    # FIX: A lóxica de filtros de vídeo corrixida
+    if speed < 1.0 and interpolate:
+        vf_filters.append(f"minterpolate=fps={float(fps_value):.2f}")
+    elif use_custom_fps and abs(float(fps_value) - (input_ffmpeg_rate if speed != 1.0 else original_fps)) > 0.01:
+        vf_filters.append(f"fps={float(fps_value):.2f}")
+
+    eq_params = []
+    if brightness != 0.0: eq_params.append(f"brightness={brightness:.3f}")
+    if contrast != 1.0: eq_params.append(f"contrast={contrast:.3f}")
+    if saturation != 1.0: eq_params.append(f"saturation={saturation:.3f}")
+    if gamma != 1.0: eq_params.append(f"gamma={gamma:.3f}")
+    if eq_params: vf_filters.append("eq=" + ":".join(eq_params))
+    if blur > 0.0: vf_filters.append(f"boxblur=luma_radius={blur:.3f}:luma_power=1")
+    if sharp > 0.0: vf_filters.append(f"unsharp=lx=5:ly=5:la={sharp:.3f}")
+
+    if use_fixed_res and 'x' in fixed_resolution:
+        try: w, h = map(int, fixed_resolution.lower().split('x')); vf_filters.append(generate_crop_filter_for_aspect_ratio(w, h))
+        except ValueError: raise gr.Error("Resolución non válida. Usa: 1920x1080")
+    
+    cmd_final = [FFMPEG_PATH, "-framerate", str(input_ffmpeg_rate), "-i", str(frame_source)]
     tracks, vols = [], []
+    if audio_track_1_tempfile:
+        t = process_audio_track(1, audio_track_1_tempfile, fade_in_1, fade_out_1, final_video_duration, speed, preserve_pitch)
+        if t: tracks.append(t); vols.append(vol_track_1)
+    if audio_track_2_tempfile:
+        t = process_audio_track(2, audio_track_2_tempfile, fade_in_2, fade_out_2, final_video_duration, speed, preserve_pitch)
+        if t: tracks.append(t); vols.append(vol_track_2)
     if process_audio and is_conventional_video and vol_original > 0:
         speed_filter = f"atempo={speed:.4f}"
         if preserve_pitch and verify_audio_filters()[1]: speed_filter = f"rubberband=tempo={speed:.4f}"
@@ -302,95 +346,40 @@ def process_video(input_tempfile, output_path, speed=1.0, quality_crf=23, use_gp
             subprocess.run([FFMPEG_PATH, "-i", str(input_path), "-vn", "-af", speed_filter, "-acodec", "pcm_s16le", "-y", str(orig_audio)], check=True, capture_output=True)
             tracks.append(str(orig_audio)); vols.append(vol_original)
         except subprocess.CalledProcessError: logger.warning("Non se puido procesar o audio orixinal.")
-    
-    if audio_track_1_tempfile:
-        t = process_audio_track(1, audio_track_1_tempfile, fade_in_1, fade_out_1, final_video_duration, speed, preserve_pitch)
-        if t: tracks.append(t); vols.append(vol_track_1)
-    if audio_track_2_tempfile:
-        t = process_audio_track(2, audio_track_2_tempfile, fade_in_2, fade_out_2, final_video_duration, speed, preserve_pitch)
-        if t: tracks.append(t); vols.append(vol_track_2)
-
-    # Engadir todas as pistas de audio como entradas
-    for t in tracks:
-        cmd_final.extend(["-i", t])
-
-    # 3. Construír a cadea de filtros de VÍDEO para -vf
-    vf_filters = []
-    if speed != 1.0: vf_filters.append(f"setpts={1.0/speed:.4f}*PTS")
-    if speed < 1.0 and interpolate: vf_filters.append(f"minterpolate=fps={target_fps:.2f}")
-    elif use_custom_fps and abs(target_fps - (original_fps * speed)) > 0.01: vf_filters.append(f"fps={target_fps:.2f}")
-    
-    # Filtros de cor (actualizados)
-    eq_params = []
-    if brightness != 0.0:
-        eq_params.append(f"brightness={brightness:.3f}")
-    if contrast != 1.0:
-        eq_params.append(f"contrast={contrast:.3f}")
-    if saturation != 1.0:
-        eq_params.append(f"saturation={saturation:.3f}")
-    if gamma != 1.0:
-        eq_params.append(f"gamma={gamma:.3f}")
-    
-    if eq_params:
-        vf_filters.append("eq=" + ":".join(eq_params))
-    
-    if blur > 0.0:
-        vf_filters.append(f"boxblur=luma_radius={blur:.3f}:luma_power=1")
-    
-    if sharp > 0.0:
-        vf_filters.append(f"unsharp=lx=5:ly=5:la={sharp:.3f}")
-    
-    if use_fixed_res and 'x' in fixed_resolution:
-        try: 
-            w, h = map(int, fixed_resolution.lower().split('x'))
-            vf_filters.append(generate_crop_filter_for_aspect_ratio(w, h))
-        except ValueError: 
-            raise gr.Error("Resolución non válida. Usa: 1920x1080")
-    
-    if vf_filters:
-        cmd_final.extend(["-vf", ",".join(vf_filters)])
-
-    # 4. Construír os filtros de AUDIO e os mapeos
-    if not tracks:
-        cmd_final.append("-an") # Sen audio
-    elif len(tracks) == 1:
-        # Caso simple: 1 pista de audio. Usamos -af para o volume.
-        cmd_final.extend(["-af", f"volume={vols[0]:.3f}"])
-        cmd_final.extend(["-map", "0:v", "-map", "1:a"])
-    else:
-        # Caso complexo: >1 pista de audio. Usamos -filter_complex SÓ para o audio.
-        vol_filters = ";".join(f"[{i+1}:a]volume={vols[i]:.3f}[a{i+1}]" for i in range(len(tracks)))
-        mix_inputs = "".join(f"[a{i+1}]" for i in range(len(tracks)))
-        filter_complex_str = f"{vol_filters};{mix_inputs}amix=inputs={len(tracks)}:duration=first[aout]"
-        cmd_final.extend(["-filter_complex", filter_complex_str])
-        cmd_final.extend(["-map", "0:v", "-map", "[aout]"])
-
-    # 5. Engadir opcións de codificación e saída
     output_dir = Path(output_path).parent
     if output_dir != Path(): output_dir.mkdir(parents=True, exist_ok=True)
+    if not tracks: cmd_final.append("-an")
+    else:
+        for t in tracks: cmd_final.extend(["-i", t])
+        mix_inputs = "".join(f"[{i+1}:a]" for i in range(len(tracks)))
+        mix_filter = f"{mix_inputs}amix=inputs={len(tracks)}:duration=first[aout]" if len(tracks) > 1 else "[a1]volume=1.0[aout]"
+        vol_filters = ";".join(f"[{i+1}:a]volume={vol:.3f}[a{i+1}]" for i, vol in enumerate(vols))
+        cmd_final.extend(["-filter_complex", f"{vol_filters};{mix_filter}", "-map", "0:v", "-map", "[aout]"])
+    if vf_filters: cmd_final.extend(["-vf", ",".join(vf_filters)])
     encoder = ["-c:v", "h264_nvenc", "-preset", "p5", "-qp", str(int(quality_crf))] if use_gpu and detect_gpu() else ["-c:v", "libx264", "-preset", "fast", "-crf", str(int(quality_crf))]
-    cmd_final.extend(encoder + ["-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-shortest", "-y", output_path])
-    
+    cmd_final.extend(encoder + ["-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", "-y", output_path, "-shortest"])
     logger.info(f"Executando FFmpeg: {' '.join(cmd_final)}")
     try:
         result = subprocess.run(cmd_final, check=True, capture_output=True, text=True, encoding='utf-8')
-    except subprocess.CalledProcessError as e:
-        logger.error(f"O procesamento de vídeo fallou. Stderr:\n{e.stderr}")
-        raise gr.Error(f"O procesamento de vídeo fallou:\n\n{e.stderr}")
-    except Exception as e:
-        logger.error(f"Ocorreu un erro inesperado: {e}")
-        raise gr.Error(f"O procesamento de vídeo fallou por un erro inesperado: {e}")
-        
+        if result.returncode != 0: raise gr.Error(f"Erro de FFmpeg:\n{result.stderr.decode()}")
+    except Exception as e: raise gr.Error(f"O procesamento de vídeo fallou: {e}")
     return output_path, input_info, get_video_info(output_path)
 
 def create_interface():
-    """Crea a interface de usuario con Gradio."""
     with gr.Blocks(theme=gr.themes.Soft(), title="Video Converter Pro+") as demo:
-        gr.Markdown("## 🎬 Video Converter Pro+ (Solución Definitiva)")
+        gr.Markdown("## 🎬 Video Converter Pro+ (Optimizado)")
         with gr.Row():
             with gr.Column(scale=2):
                 input_file = gr.File(label="Ficheiro de entrada", file_types=['video', 'image'], file_count="single")
                 output_path = gr.Textbox(label="Ruta de saída", value="output.mp4", placeholder="Introduce o nome do ficheiro de saída...")
+                with gr.Accordion("💾 Xestión de Axustes", open=True):
+                    preset_dropdown = gr.Dropdown(label="Cargar axuste gardado", choices=get_preset_choices(), interactive=True)
+                    with gr.Row():
+                        load_btn = gr.Button("Cargar")
+                        delete_btn = gr.Button("Eliminar", variant="stop")
+                    with gr.Row():
+                        new_preset_name = gr.Textbox(label="Nome do novo axuste", placeholder="Escribe un nome e preme Gardar...")
+                        save_btn = gr.Button("Gardar Axustes Actuais")
                 with gr.Accordion("⚙️ Opcións principais", open=True):
                     with gr.Row():
                         speed = gr.Slider(label="Velocidade", minimum=0.25, maximum=4.0, value=1.0, step=0.05)
@@ -405,14 +394,13 @@ def create_interface():
                     with gr.Row():
                         interpolate = gr.Checkbox(label="Interpolar (mellor cámara lenta)", value=False)
                         custom_fps = gr.Checkbox(label="Usar FPS personalizado", value=False)
-                    fps_value = gr.Slider(label="FPS obxectivo", minimum=5, maximum=120, value=25, step=1)
+                    fps_value = gr.Slider(label="FPS obxectivo", minimum=5, maximum=120, value=25.0, step=1) # FIX: Value as float
                 with gr.Accordion("🎨 Corrección de cor", open=False):
                     color_preset = gr.Dropdown(label="Predefinición de cor", choices=list(COLOR_PRESETS.keys()), value="Normal")
                     with gr.Row():
                         brightness = gr.Slider(label="Brillo", minimum=-0.3, maximum=0.3, value=0.0, step=0.01)
                         contrast = gr.Slider(label="Contraste", minimum=0.7, maximum=1.5, value=1.0, step=0.01)
                         saturation = gr.Slider(label="Saturación", minimum=0.5, maximum=2.0, value=1.0, step=0.01)
-                    # Novos controles
                     with gr.Row():
                         sharp = gr.Slider(label="Enfoque", minimum=0.0, maximum=10.0, value=0.0, step=0.1)
                         blur = gr.Slider(label="Desenfoque", minimum=0.0, maximum=10.0, value=0.0, step=0.1)
@@ -438,6 +426,7 @@ def create_interface():
                         vol_track_2 = gr.Slider(label="Volume da pista 2", minimum=0.0, maximum=2.0, value=1.0, step=0.05)
                 
                 process_btn = gr.Button("🚀 Procesar vídeo", variant="primary")
+                cancel_btn = gr.Button("❌ Cancelar Procesamento")
                 quit_btn = gr.Button("🔴 Pechar Aplicación")
             
             with gr.Column(scale=3):
@@ -448,45 +437,34 @@ def create_interface():
                 with gr.Row(visible=True) as preview_row:
                     before_preview = gr.Image(label="Antes")
                     after_preview = gr.Image(label="Despois")
-        
-        # --- Event handlers ---
-        # Actualizado para incluir novos parámetros
-        preview_btn.click(
-            fn=preview_color_correction, 
-            inputs=[input_file, brightness, contrast, saturation, sharp, blur, gamma],
-            outputs=[before_preview, after_preview]
-        )
-        
-        # Actualizado para devolver 6 valores
-        color_preset.change(
-            fn=apply_color_preset, 
-            inputs=color_preset, 
-            outputs=[brightness, contrast, saturation, sharp, blur, gamma]
-        )
-        
-        # Actualizada para incluir novos controles
-        all_inputs = [
-            input_file, output_path, speed, quality, gpu, scale_enabled, scale_factor, 
-            custom_fps, fps_value, interpolate, fixed_res_enabled, fixed_res_value, 
-            process_audio, preserve_pitch,
-            audio_track_1, fade_in_1, fade_out_1, 
-            audio_track_2, fade_in_2, fade_out_2,
-            vol_original, vol_track_1, vol_track_2, 
-            brightness, contrast, saturation,
-            sharp, blur, gamma  # Novos parámetros
+
+        preset_components = [
+            speed, quality, gpu, scale_enabled, scale_factor, fixed_res_enabled,
+            fixed_res_value, interpolate, custom_fps, fps_value, brightness,
+            contrast, saturation, sharp, blur, gamma, process_audio, preserve_pitch,
+            fade_in_1, fade_out_1, fade_in_2, fade_out_2, vol_original,
+            vol_track_1, vol_track_2
         ]
         
-        process_btn.click(fn=process_video, inputs=all_inputs, outputs=[result_video, input_info, output_info])
+        # FIX: pasamos fps_value como un input separado para que non se mesture
+        all_process_inputs = [
+            input_file, output_path, speed, quality, gpu, scale_enabled, scale_factor,
+            custom_fps, fps_value, interpolate, fixed_res_enabled, fixed_res_value,
+            process_audio, preserve_pitch, audio_track_1, fade_in_1, fade_out_1,
+            audio_track_2, fade_in_2, fade_out_2, vol_original, vol_track_1,
+            vol_track_2, brightness, contrast, saturation, sharp, blur, gamma
+        ]
         
-        # --- COMPORTAMENTO DE PECHE RESTAURADO E CORRECTO ---
+        preview_btn.click(fn=preview_color_correction, inputs=[input_file, brightness, contrast, saturation, sharp, blur, gamma], outputs=[before_preview, after_preview])
+        color_preset.change(fn=apply_color_preset, inputs=color_preset, outputs=[brightness, contrast, saturation, sharp, blur, gamma])
+        process_event = process_btn.click(fn=process_video, inputs=all_process_inputs, outputs=[result_video, input_info, output_info])
+        cancel_btn.click(fn=None, inputs=None, outputs=None, cancels=[process_event])
+        save_btn.click(fn=save_preset, inputs=[new_preset_name] + preset_components, outputs=preset_dropdown)
+        load_btn.click(fn=load_preset, inputs=preset_dropdown, outputs=preset_components)
+        delete_btn.click(fn=delete_preset, inputs=preset_dropdown, outputs=preset_dropdown)
+        
         def shutdown_app():
-            """
-            Pecha a aplicación forzando a saída do proceso.
-            Este é o método que funcionaba correctamente no teu contorno.
-            """
-            logger.info("Recibida solicitude de peche forzado. Pechando a aplicación...")
             os._exit(0)
-
         quit_btn.click(fn=shutdown_app)
     
     return demo
