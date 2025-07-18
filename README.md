@@ -10,10 +10,12 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
 * Easy video and image conversion powered by ffmpeg.
 * **Reliably converts animated WebP files (the original motivation for the project!).**
 * Adjust video speed and quality (CRF/QP).
-* Color correction presets and manual adjustments (brightness, contrast, saturation).
+* Color correction presets and manual adjustments (brightness, contrast, saturation...).
 * Scale video resolution.
 * Audio mixing with fade-in/out effects for multiple tracks.
 * GPU acceleration support (NVIDIA NVENC).
+* It does not use AI models to be lightweight.
+* Creates a cache to speed up processes, it is deleted upon exit or manually.
 
 ## 🚀 How to Use
 
@@ -21,11 +23,11 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
 2.  Download the latest `.AppImage` file.
 3.  Make it executable:
     ```bash
-    chmod +x Video-Converter-Gal-*.AppImage
+    chmod +x VideoConverterGalEng-x86_64.AppImage
     ```
 4.  Run it:
     ```bash
-    ./Video-Converter-Gal-*.AppImage
+    ./VideoConverterGalEng-x86_64.AppImage
     ```
 5. Use crea.sh to compile the appimage from the source code.
  
