@@ -3,7 +3,7 @@
 A user-friendly GUI for converting videos and animations, (designed for short videos, up to about 20 seconds), **with special support for animated WebP files**. Built with Python/Gradio and packaged as a portable AppImage for Linux. The UI is in Galician (Galego) and English.
 
 ![Screenshot of the app](imaxe.png)
-*Note: You need to upload your `imaxe.png` file to the repository for this image to be displayed.*
+
 
 ## ✨ Features
 
