@@ -27,7 +27,8 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
     ```bash
     ./Video-Converter-Gal-*.AppImage
     ```
-
+5. Use crea.sh to compile the appimage from the source code.
+ 
 ## 📄 License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
