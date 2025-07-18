@@ -7,7 +7,7 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
 
 ## ✨ Features
 
-* Easy video and image conversion powered by ffmpeg.
+* Easy video processing and image extraction powered by ffmpeg.
 * **Reliably converts animated WebP files (the original motivation for the project!).**
 * Adjust video speed and quality (CRF/QP).
 * Color correction presets and manual adjustments (brightness, contrast, saturation...).
@@ -16,6 +16,7 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
 * GPU acceleration support (NVIDIA NVENC).
 * It does not use AI models to be lightweight.
 * Creates a cache to speed up processes, it is deleted upon exit or manually.
+* Managing presets.
 
 ## 🚀 How to Use
 
