@@ -30,7 +30,7 @@ A user-friendly GUI for converting videos and animations, (designed for short vi
     ```bash
     ./VideoConverterGalEng-x86_64.AppImage
     ```
-5. Use crea.sh to compile the appimage from the source code.
+5. Or use crea.sh to compile the appimage from the source code.
  
 ## 📄 License
 
